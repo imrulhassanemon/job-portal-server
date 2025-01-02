@@ -1,17 +1,40 @@
 const express = require("express");
 const cors = require("cors");
-const jwt = require('jsonwebtoken')
-const cookieParser = require('cookie-parser');
+const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
 const app = express();
 const port = process.env.port || 3000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
-app.use(cors({
-  origin: 'http://localhost:5173',
-  credentials: true
-}));
+app.use(
+  cors({
+    origin: ["http://localhost:5173"],
+    credentials: true,
+  })
+);
 app.use(express.json());
 app.use(cookieParser());
+
+const logger = (req, res, next) => {
+  console.log("inside the logger ");
+  console.log("hello bai", req.cookies);
+  next();
+};
+
+
+const veryfiToken = (req, res, next) => {
+  console.log('inside veryfy token middleware kemon achen apnara ', req.cookies);
+  const token = req.cookies?.token;
+  if(!token){
+    return res.status(401)
+  }
+  jwt.verify(token, process.env.ACCESS_JWT_SECRET, (err, decoded) => {
+    if(err){
+      return res.status(401).send({message: 'UnAuthorized Access '})
+    }
+  })
+  next()
+}
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.p6yi1.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -41,23 +64,24 @@ async function run() {
       .db("job-portal")
       .collection("job-applications");
 
-
-
-      // Auth related Apis
-    app.post('/jwt', async (req, res) => {
+    // Auth related Apis
+    app.post("/jwt", async (req, res) => {
       const user = req.body;
-      const token = jwt.sign(user, process.env.JWT_SECRET, {expiresIn: '1h'})
+      const token = jwt.sign(user, process.env.ACCESS_JWT_SECRET, {
+        expiresIn: "1h",
+      });
       res
-      .cookie('token', token, {
-        httpOnly: true,
-        secure:false
-      })
-      .send({success: true})
-    })
-
+        .cookie("token", token, {
+          httpOnly: true,
+          secure: false,
+        })
+        .send({ success: true });
+    });
 
     // JOB RELATED API
-    app.get("/jobs", async (req, res) => {
+    app.get("/jobs", logger,    async (req, res) => {
+      console.log("now inside the api callback");
+      
       const email = req.query.email;
       let query = {};
       if (email) {
@@ -87,7 +111,7 @@ async function run() {
 
     // job application api
 
-    app.get("/job-application", async (req, res) => {
+    app.get("/job-application", veryfiToken, async (req, res) => {
       const email = req.query.email;
       const query = { applicant_email: email };
       const result = await jobApplicationConnection.find(query).toArray();
@@ -126,7 +150,6 @@ async function run() {
       } else {
         newCount = 1;
       }
-      // now update the job info
 
       const filter = { _id: new ObjectId(id) };
       const updateDoc = {
@@ -151,15 +174,18 @@ async function run() {
 
     app.patch("/job-applications/:id", async (req, res) => {
       const id = req.params.id;
-      const data = req.body
+      const data = req.body;
       const filter = { _id: new ObjectId(id) };
       const updateDoc = {
         $set: {
-          status: data.status
-        }
-      }
-      const result = await jobApplicationConnection.updateOne(filter, updateDoc)
-      res.send(result)
+          status: data.status,
+        },
+      };
+      const result = await jobApplicationConnection.updateOne(
+        filter,
+        updateDoc
+      );
+      res.send(result);
     });
   } finally {
     // Ensures that the client will close when you finish/error
