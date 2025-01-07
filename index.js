@@ -17,26 +17,47 @@ app.use(cookieParser());
 
 const logger = (req, res, next) => {
   console.log("inside the logger ");
-  console.log("hello bai", req.cookies);
+  // console.log("hello bai", req.cookies);
   next();
 };
 
 
-const veryfiToken = (req, res, next) => {
-  console.log('inside veryfy token middleware kemon achen apnara ', req.cookies);
-  const token = req.cookies?.token;
+// const veryfiToken = (req, res, next) => {
+//   console.log('inside veryfy token middleware kemon achen apnara ', req.cookies);
+//   const token = req?.cookies?.token;
+//   console.log(token + '...');
+//   console.log(`${req.method} request to ${req.url}`)
+//   if(!token){
+//     return res.status(401).send({message: 'UnAuthorized Access'})
+//   }
+//   jwt.verify(token, process.env.ACCESS_JWT_SECRET, (err, decoded) => {
+//     if(err){
+//       return res.status(401).send({message: 'UnAuthorized Access '})
+//     }
+//     next()
+      
+//   })
+  
+// }
+
+
+const verifyToken  = (req, res, next) => {
+  const token = req?.cookies?.token;
+  // console.log(token);
   if(!token){
-    return res.status(401)
+    return res.status(401).send({message: 'UnAuthorized Token'})
   }
   jwt.verify(token, process.env.ACCESS_JWT_SECRET, (err, decoded) => {
     if(err){
-      return res.status(401).send({message: 'UnAuthorized Access '})
+      return res.status(401).send({message: "UnAuthorized Token"})
     }
+    req.user = decoded;
+    next()
   })
-  next()
 }
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.p6yi1.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
+
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -73,7 +94,7 @@ async function run() {
       res
         .cookie("token", token, {
           httpOnly: true,
-          secure: false,
+          secure: false, // {false} for localhost {true} for production 
         })
         .send({ success: true });
     });
@@ -81,7 +102,7 @@ async function run() {
     // JOB RELATED API
     app.get("/jobs", logger,    async (req, res) => {
       console.log("now inside the api callback");
-      
+      console.log(req.cookies.token);
       const email = req.query.email;
       let query = {};
       if (email) {
@@ -90,7 +111,6 @@ async function run() {
       const cursor = jobsCollection.find(query);
       const result = await cursor.toArray();
       res.send(result);
-      // console.log(result);
     });
 
     // get specific job by id
@@ -105,19 +125,22 @@ async function run() {
     app.post("/jobs", async (req, res) => {
       const newJob = req.body;
       const result = await jobsCollection.insertOne(newJob);
-      // console.log(result);
       res.send(result);
     });
 
     // job application api
 
-    app.get("/job-application", veryfiToken, async (req, res) => {
+    // veryfiToken,
+    app.get("/job-application", verifyToken,  async (req, res) => {
       const email = req.query.email;
       const query = { applicant_email: email };
       const result = await jobApplicationConnection.find(query).toArray();
 
+      if(req.user.email !== email){
+        return res.status(403).send({message: "Forbidden User"})
+      }
+
       for (const application of result) {
-        // console.log(application.job_id);
         const query = { _id: new ObjectId(application.job_id) };
         const job = await jobsCollection.findOne(query);
         if (job) {
@@ -136,7 +159,7 @@ async function run() {
       res.send(result);
     });
 
-    app.post("/job-applications", async (req, res) => {
+    app.post("/job-applications",   async (req, res) => {
       const application = req.body;
       const result = jobApplicationConnection.insertOne(application);
 
