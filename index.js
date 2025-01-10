@@ -43,7 +43,7 @@ const logger = (req, res, next) => {
 
 const verifyToken  = (req, res, next) => {
   const token = req?.cookies?.token;
-  // console.log(token);
+  console.log(token);
   if(!token){
     return res.status(401).send({message: 'UnAuthorized Token'})
   }
@@ -89,7 +89,7 @@ async function run() {
     app.post("/jwt", async (req, res) => {
       const user = req.body;
       const token = jwt.sign(user, process.env.ACCESS_JWT_SECRET, {
-        expiresIn: "1h",
+        expiresIn: "10d",
       });
       res
         .cookie("token", token, {
